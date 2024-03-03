@@ -1,46 +1,133 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
+﻿using Application.DTOs;
+using Application.Interface;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
 using System.Threading.Tasks;
-using TesteBackendEnContact.Controllers.Models;
-using TesteBackendEnContact.Core.Interface.ContactBook.Company;
-using TesteBackendEnContact.Repository.Interface;
 
 namespace TesteBackendEnContact.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("v1/company/")]
     public class CompanyController : ControllerBase
     {
-        private readonly ILogger<CompanyController> _logger;
+        private readonly ICompanyService _companyService;
+        private readonly IContactBookService _contactBookService;
 
-        public CompanyController(ILogger<CompanyController> logger)
+        public CompanyController(ICompanyService companyService,IContactBookService contactBook)
         {
-            _logger = logger;
+            _companyService = companyService;
+            _contactBookService = contactBook;
         }
 
-        [HttpPost]
-        public async Task<ActionResult<ICompany>> Post(SaveCompanyRequest company, [FromServices] ICompanyRepository companyRepository)
+        [HttpGet("get")]
+        public async Task<IActionResult> GetAll()
         {
-            return Ok(await companyRepository.SaveAsync(company.ToCompany()));
+            try
+            {
+                var companies = await _companyService.GetAll();
+                if (!companies.Any()) return NotFound("Companies NotFound");
+                return Ok(companies);
+            }
+            catch
+            {
+                return StatusCode(500, "internal error");
+            }
         }
 
-        [HttpDelete]
-        public async Task Delete(int id, [FromServices] ICompanyRepository companyRepository)
+        [HttpGet("getById{id:int}")]
+        public async Task<IActionResult> GetById(int id)
         {
-            await companyRepository.DeleteAsync(id);
+            if (id <= 0) return BadRequest("Invalid Id");
+
+            var result = await _companyService.GetById(id);
+
+            if (result == null) return NotFound("Company NotFound");
+            return Ok(result);
+
         }
 
-        [HttpGet]
-        public async Task<IEnumerable<ICompany>> Get([FromServices] ICompanyRepository companyRepository)
+        [HttpPost("Create")]
+        public async Task<IActionResult> AddCompany([FromBody] CompanyDTO companyDTO)
         {
-            return await companyRepository.GetAllAsync();
+            try
+            {                   
+                var contactBook = _contactBookService.CreateWithCompany(companyDTO);
+
+                var contactBookName = _contactBookService.FindByName(companyDTO.Name);
+                companyDTO.ContactBookId = contactBookName.Result.Id;
+
+                if(companyDTO.Name == null) return BadRequest("Enter a name");
+                await _companyService.Create(companyDTO);
+                return Ok(companyDTO);
+            }
+            catch
+            {
+                return StatusCode(500, "internal error");
+            }            
         }
 
-        [HttpGet("{id}")]
-        public async Task<ICompany> Get(int id, [FromServices] ICompanyRepository companyRepository)
+        [HttpPut("update/{id:int}")]
+        public async Task<IActionResult> UpdateCompany(int id,UpdateCompanyDTO companyDTO)
         {
-            return await companyRepository.GetAsync(id);
+            try
+            {
+                var company = await _companyService.GetById(id);
+                if (company == null) return NotFound("Company NotFound");
+
+                await _companyService.Update(id,companyDTO);
+                return Ok(companyDTO);
+            }
+            catch(DbUpdateException)
+            {
+                return StatusCode(500, "cant update this");
+            }
+            catch
+            {
+                return StatusCode(500, "internal error");
+            }
         }
+
+        [HttpDelete("remove/{id:int}")]
+        public async Task<IActionResult> RemoveCompany(int id)
+        {
+            try
+            {
+                var company = await _companyService.GetById(id);
+                if (company == null) return NotFound("Company NotFound");
+
+                await _companyService.Remove(company);
+                return Ok("Company Removed");
+            }
+            catch (DbUpdateException)
+            {
+                return StatusCode(500, "cant remove this");
+            }
+            catch
+            {
+                return StatusCode(500, "internal error");
+            }
+        }
+
+        [HttpGet("CompanyContacts/{companyName}")]
+        public async Task<IActionResult> FindContatsOfCompany(string companyName)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(companyName)) return BadRequest("Invalid Name");
+
+                var result = await _companyService.FindCompanyContacts(companyName);
+                return Ok(result);
+              
+            }
+            catch
+            {
+                return StatusCode(500, "internal error");
+            }
+        }
+
+
+
+
     }
 }

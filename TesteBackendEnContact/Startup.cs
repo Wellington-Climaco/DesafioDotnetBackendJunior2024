@@ -5,11 +5,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
-
 using System;
-using TesteBackendEnContact.Database;
-using TesteBackendEnContact.Repository;
-using TesteBackendEnContact.Repository.Interface;
+using Infra.IoC;
+using System.Text.Json.Serialization;
+
 
 namespace TesteBackendEnContact
 {
@@ -25,22 +24,14 @@ namespace TesteBackendEnContact
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddControllers();
+            services.AddControllers().AddJsonOptions(x=>x.JsonSerializerOptions.ReferenceHandler = null);
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "TesteBackendEnContact", Version = "v1" });
             });
 
-            services.AddFluentMigratorCore()
-                    .ConfigureRunner(rb => rb
-                        .AddSQLite()
-                        .WithGlobalConnectionString(Configuration.GetConnectionString("DefaultConnection"))
-                        .ScanIn(typeof(Startup).Assembly).For.Migrations())
-                    .AddLogging(lb => lb.AddFluentMigratorConsole());
-
-            services.AddSingleton(new DatabaseConfig { ConnectionString = Configuration.GetConnectionString("DefaultConnection") });
-            services.AddScoped<IContactBookRepository, ContactBookRepository>();
-            services.AddScoped<ICompanyRepository, CompanyRepository>();
+            services.AddInfrastructure(Configuration);
+           
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -61,9 +52,7 @@ namespace TesteBackendEnContact
             {
                 endpoints.MapControllers();
             });
-
-            var runner = serviceProvider.GetRequiredService<IMigrationRunner>();
-            runner.MigrateUp();
+           
         }
     }
 }
